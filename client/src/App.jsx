@@ -3,7 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import Home from './pages/Home'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
-import ForgotPassword from './pages/ForgotPassword'   // ✅ NEW
+import ForgotPassword from "./pages/Forgotpassword"; // ✅ NEW
 import Dashboard from './pages/Dashboard'
 import Projects from './pages/Projects'
 import ProjectDetail from './pages/ProjectDetail'
