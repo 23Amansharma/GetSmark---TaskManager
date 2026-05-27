@@ -1,93 +1,86 @@
 import { useState, useEffect } from 'react'
 import api from '../utils/api'
 import { useNavigate } from 'react-router-dom'
+import ProjectCard from '../components/projects/ProjectCard'
+import ProjectForm from '../components/projects/ProjectForm'
+import Modal from '../components/common/Modal'
+import Button from '../components/common/Button'
+import EmptyState from '../components/common/EmptyState'
+import LoadingSpinner from '../components/common/LoadingSpinner'
+import { Plus } from 'lucide-react'
 
 export default function Projects() {
   const [projects, setProjects] = useState([])
-  const [form, setForm] = useState({ name: '', description: '' })
-  const [showForm, setShowForm] = useState(false)
-  const navigate = useNavigate()
+  const [loading, setLoading] = useState(true)
+  const [creating, setCreating] = useState(false)
+  const [showModal, setShowModal] = useState(false)
 
-  useEffect(() => {
-    fetchProjects()
-  }, [])
+  useEffect(() => { fetchProjects() }, [])
 
   const fetchProjects = async () => {
-    const res = await api.get('/projects')
-    setProjects(res.data)
+    setLoading(true)
+    try {
+      const res = await api.get('/projects')
+      setProjects(res.data)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const createProject = async (e) => {
-    e.preventDefault()
-    await api.post('/projects', form)
-    setForm({ name: '', description: '' })
-    setShowForm(false)
-    fetchProjects()
+  const createProject = async (form) => {
+    setCreating(true)
+    try {
+      await api.post('/projects', form)
+      setShowModal(false)
+      fetchProjects()
+    } finally {
+      setCreating(false)
+    }
   }
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <h2>Projects</h2>
+    <div className="p-6">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <button style={styles.btn} onClick={() => navigate('/dashboard')}>Dashboard</button>
-          <button style={{...styles.btn, background:'#52c41a'}} onClick={() => setShowForm(!showForm)}>
-            + New Project
-          </button>
+          <h1 className="text-2xl font-bold text-gray-800">Projects</h1>
+          <p className="text-gray-500 text-sm mt-1">Manage all your team projects</p>
         </div>
+        <Button onClick={() => setShowModal(true)}>
+          <Plus size={16} /> New Project
+        </Button>
       </div>
 
-      {showForm && (
-        <div style={styles.formCard}>
-          <h3>Create Project</h3>
-          <form onSubmit={createProject}>
-            <input
-              style={styles.input}
-              placeholder="Project Name"
-              value={form.name}
-              onChange={e => setForm({...form, name: e.target.value})}
-              required
-            />
-            <input
-              style={styles.input}
-              placeholder="Description"
-              value={form.description}
-              onChange={e => setForm({...form, description: e.target.value})}
-            />
-            <button style={styles.btn} type="submit">Create</button>
-          </form>
+      {/* Projects Grid */}
+      {loading ? (
+        <LoadingSpinner />
+      ) : projects.length === 0 ? (
+        <EmptyState
+          icon="📁"
+          title="No projects yet"
+          description="Create your first project and start collaborating with your team."
+          action={
+            <Button onClick={() => setShowModal(true)}>
+              <Plus size={16} /> Create Project
+            </Button>
+          }
+        />
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
+          {projects.map((project, index) => (
+            <ProjectCard key={project.id} project={project} index={index} />
+          ))}
         </div>
       )}
 
-      <div style={styles.grid}>
-        {projects.map(p => (
-          <div key={p.id} style={styles.card} onClick={() => navigate(`/projects/${p.id}`)}>
-            <h3 style={styles.projectName}>{p.name}</h3>
-            <p style={styles.desc}>{p.description}</p>
-            <p style={styles.members}>👥 {p.members?.length || 0} members</p>
-          </div>
-        ))}
-      </div>
-
-      {projects.length === 0 && (
-        <div style={styles.empty}>
-          <p>No projects yet. Create your first project!</p>
-        </div>
-      )}
+      {/* Create Modal */}
+      <Modal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        title="Create New Project"
+      >
+        <ProjectForm onSubmit={createProject} loading={creating} />
+      </Modal>
     </div>
   )
-}
-
-const styles = {
-  container: { padding:'20px', background:'#f0f2f5', minHeight:'100vh' },
-  header: { display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px', background:'white', padding:'15px 20px', borderRadius:'10px' },
-  grid: { display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:'15px' },
-  card: { background:'white', padding:'20px', borderRadius:'10px', cursor:'pointer', boxShadow:'0 2px 8px rgba(0,0,0,0.1)', borderTop:'4px solid #1890ff' },
-  projectName: { color:'#1890ff', marginBottom:'8px' },
-  desc: { color:'#666', fontSize:'14px', marginBottom:'10px' },
-  members: { color:'#999', fontSize:'13px' },
-  btn: { padding:'8px 16px', background:'#1890ff', color:'white', border:'none', borderRadius:'5px', cursor:'pointer', marginLeft:'10px' },
-  formCard: { background:'white', padding:'20px', borderRadius:'10px', marginBottom:'20px' },
-  input: { width:'100%', padding:'10px', marginBottom:'10px', borderRadius:'5px', border:'1px solid #ddd', boxSizing:'border-box' },
-  empty: { textAlign:'center', background:'white', padding:'40px', borderRadius:'10px', color:'#999' }
 }

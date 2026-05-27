@@ -7,6 +7,7 @@ target/
 ### STS ###
 .apt_generated
 .classpath
+.application.properties
 .factorypath
 .project
 .env

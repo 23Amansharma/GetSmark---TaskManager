@@ -254,8 +254,13 @@
 .project-pulse-head span,
 .project-pulse-foot,
 .workload-copy span,
+.dashboard-actions .notification-bell button,
+.dashboard-actions .notification-bell svg {
+  color: #1e3a6e;
+  stroke: #1e3a6e;
+}
 .dashboard-sync-chip span {
-  color: #6b7280;
+  color: #375da8;
 }
 
 .dashboard-actions {

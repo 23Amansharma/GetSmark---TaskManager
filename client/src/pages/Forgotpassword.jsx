@@ -2,8 +2,12 @@ import { useState, useRef, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import api from '../utils/api'
 
+// OTP rate limiting: max 4 sends, then 5 minute lockout
+const OTP_MAX_TRIES = 4
+const OTP_LOCKOUT_SECONDS = 5 * 60 // 5 minutes
+
 export default function ForgotPassword() {
-  const [step, setStep] = useState(1)   // 1=email, 2=otp, 3=new password
+  const [step, setStep] = useState(1)
   const [email, setEmail] = useState('')
   const [otp, setOtp] = useState(['', '', '', '', '', ''])
   const [newPassword, setNewPassword] = useState('')
@@ -11,47 +15,86 @@ export default function ForgotPassword() {
   const [error, setError] = useState('')
   const [info, setInfo] = useState('')
   const [loading, setLoading] = useState(false)
-  const [countdown, setCountdown] = useState(0)
   const [success, setSuccess] = useState(false)
+
+  // Rate limiting state
+  const [resendCountdown, setResendCountdown] = useState(0)    // per-send cooldown (60s)
+  const [otpSendCount, setOtpSendCount] = useState(0)          // how many times OTP sent
+  const [lockoutSeconds, setLockoutSeconds] = useState(0)      // 5 min lockout after 4 tries
+
   const otpRefs = useRef([])
   const navigate = useNavigate()
 
+  // Per-send 60s countdown
   useEffect(() => {
-    if (countdown <= 0) return
-    const t = setTimeout(() => setCountdown(c => c - 1), 1000)
+    if (resendCountdown <= 0) return
+    const t = setTimeout(() => setResendCountdown(c => c - 1), 1000)
     return () => clearTimeout(t)
-  }, [countdown])
+  }, [resendCountdown])
 
-  // ── Step 1: Send reset OTP ────────────────────────────────────────────────
+  // 5 min lockout countdown
+  useEffect(() => {
+    if (lockoutSeconds <= 0) return
+    const t = setTimeout(() => setLockoutSeconds(c => c - 1), 1000)
+    return () => clearTimeout(t)
+  }, [lockoutSeconds])
+
+  const isLocked = lockoutSeconds > 0
+  const formatLockout = (s) => {
+    const m = Math.floor(s / 60), sec = s % 60
+    return m > 0 ? `${m}m ${sec}s` : `${sec}s`
+  }
+
+  // Step 1: Send reset OTP
   const handleSendOtp = async (e) => {
     e.preventDefault()
+    if (isLocked) return
     setError(''); setInfo(''); setLoading(true)
     try {
       await api.post('/auth/forgot-password', { email })
-      setInfo('Reset OTP sent! Check your email.')
+      const newCount = otpSendCount + 1
+      setOtpSendCount(newCount)
+      setInfo(`Reset OTP sent! Check your email. (${newCount}/${OTP_MAX_TRIES} attempts used)`)
       setStep(2)
-      setCountdown(60)
+      setResendCountdown(60)
+
+      if (newCount >= OTP_MAX_TRIES) {
+        setLockoutSeconds(OTP_LOCKOUT_SECONDS)
+      }
     } catch (err) {
-      setError(err.response?.data?.message || 'Email not found.')
+      setError(err.response?.data?.message || 'Email not found. Please check and try again.')
     } finally { setLoading(false) }
   }
 
-  // ── Resend OTP ────────────────────────────────────────────────────────────
+  // Resend OTP
   const handleResend = async () => {
-    if (countdown > 0) return
+    if (resendCountdown > 0 || isLocked) return
+
+    if (otpSendCount >= OTP_MAX_TRIES) {
+      setLockoutSeconds(OTP_LOCKOUT_SECONDS)
+      setError(`Too many OTP requests. Please wait ${formatLockout(OTP_LOCKOUT_SECONDS)} before trying again.`)
+      return
+    }
+
     setError(''); setInfo(''); setLoading(true)
     try {
       await api.post('/auth/forgot-password', { email })
-      setInfo('New OTP sent!')
+      const newCount = otpSendCount + 1
+      setOtpSendCount(newCount)
+      setInfo(`New OTP sent! (${newCount}/${OTP_MAX_TRIES} attempts used)`)
       setOtp(['', '', '', '', '', ''])
-      setCountdown(60)
+      setResendCountdown(60)
       otpRefs.current[0]?.focus()
+
+      if (newCount >= OTP_MAX_TRIES) {
+        setLockoutSeconds(OTP_LOCKOUT_SECONDS)
+        setError('Maximum OTP attempts reached. You can try again after 5 minutes.')
+      }
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to resend OTP.')
     } finally { setLoading(false) }
   }
 
-  // ── OTP input handler ─────────────────────────────────────────────────────
   const handleOtpChange = (val, idx) => {
     if (!/^\d?$/.test(val)) return
     const next = [...otp]; next[idx] = val; setOtp(next)
@@ -69,7 +112,7 @@ export default function ForgotPassword() {
     e.preventDefault()
   }
 
-  // ── Step 2: Verify OTP ────────────────────────────────────────────────────
+  // Step 2: Verify OTP
   const handleVerifyOtp = async (e) => {
     e.preventDefault()
     const otpVal = otp.join('')
@@ -80,11 +123,11 @@ export default function ForgotPassword() {
       setInfo('OTP verified! Now set your new password.')
       setStep(3)
     } catch (err) {
-      setError(err.response?.data?.message || 'Invalid OTP.')
+      setError(err.response?.data?.message || 'Invalid OTP. Please try again.')
     } finally { setLoading(false) }
   }
 
-  // ── Step 3: Reset password ────────────────────────────────────────────────
+  // Step 3: Reset password
   const handleResetPassword = async (e) => {
     e.preventDefault()
     if (newPassword.length < 6) { setError('Password must be at least 6 characters.'); return }
@@ -98,20 +141,19 @@ export default function ForgotPassword() {
       setSuccess(true)
       setTimeout(() => navigate('/login'), 3000)
     } catch (err) {
-      setError(err.response?.data?.message || 'Reset failed. Try again.')
+      setError(err.response?.data?.message || 'Reset failed. Please try again.')
     } finally { setLoading(false) }
   }
 
-  // ── Success state ─────────────────────────────────────────────────────────
   if (success) {
     return (
       <div style={s.page}>
         <div style={s.card}>
           <div style={{ textAlign: 'center', padding: '20px 0' }}>
             <div style={{ fontSize: 56, marginBottom: 16 }}>🎉</div>
-            <h3 style={{ color: '#52c41a', fontSize: 20 }}>Password Reset Successful!</h3>
-            <p style={{ color: '#666', fontSize: 14 }}>Redirecting to login in 3 seconds…</p>
-            <Link to="/login" style={{ color: '#1890ff', fontWeight: 600 }}>Go to Login →</Link>
+            <h3 style={{ color: '#22c55e', fontSize: 20, margin: '0 0 8px' }}>Password Reset Successful!</h3>
+            <p style={{ color: '#64748b', fontSize: 14 }}>Redirecting to login in 3 seconds…</p>
+            <Link to="/login" style={{ color: '#6366f1', fontWeight: 700 }}>Go to Login →</Link>
           </div>
         </div>
       </div>
@@ -124,22 +166,56 @@ export default function ForgotPassword() {
     <div style={s.page}>
       <div style={s.card}>
         <div style={s.header}>
-          <div style={s.logo}>🔑</div>
+          <div
+            onClick={() => navigate('/')}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 12, cursor: 'pointer' }}
+          >
+            <img src="/logo.svg" alt="GetSmark" style={{ height: 32, width: 32 }} />
+            <span style={{ fontWeight: 800, fontSize: 20, color: '#1e1b4b', letterSpacing: '-0.5px' }}>GetSmark</span>
+          </div>
           <h2 style={s.title}>Forgot Password</h2>
           <p style={s.subtitle}>{stepTitles[step]}</p>
         </div>
 
         {/* Step dots */}
         <div style={s.dots}>
-          {[1,2,3].map(i => (
-            <div key={i} style={{ ...s.dot, background: i === step ? '#1890ff' : i < step ? '#52c41a' : '#e8e8e8', transform: i === step ? 'scale(1.3)' : 'scale(1)' }} />
+          {[1, 2, 3].map(i => (
+            <div key={i} style={{
+              ...s.dot,
+              background: i === step ? '#6366f1' : i < step ? '#22c55e' : '#e8e8e8',
+              transform: i === step ? 'scale(1.4)' : 'scale(1)',
+              boxShadow: i === step ? '0 0 0 3px rgba(99,102,241,0.2)' : 'none',
+            }} />
           ))}
         </div>
 
-        {error && <div style={s.errorBox}>⚠️ {error}</div>}
-        {info  && <div style={s.infoBox}>✉️ {info}</div>}
+        {/* Lockout warning */}
+        {isLocked && (
+          <div style={s.lockoutBox}>
+            🔒 Too many OTP requests. Please wait <strong>{formatLockout(lockoutSeconds)}</strong> before trying again.
+          </div>
+        )}
 
-        {/* ── Step 1: Email ── */}
+        {!isLocked && error && <div style={s.errorBox}>⚠️ {error}</div>}
+        {!isLocked && info && <div style={s.infoBox}>✉️ {info}</div>}
+
+        {/* OTP attempts indicator — shown when on step 2 */}
+        {step === 2 && otpSendCount > 0 && !isLocked && (
+          <div style={s.attemptsBar}>
+            {[...Array(OTP_MAX_TRIES)].map((_, i) => (
+              <div key={i} style={{
+                flex: 1, height: 4, borderRadius: 2,
+                background: i < otpSendCount ? '#f59e0b' : '#e8e8e8',
+                transition: 'background 0.3s',
+              }} />
+            ))}
+            <span style={{ fontSize: 11, color: '#94a3b8', whiteSpace: 'nowrap' }}>
+              {OTP_MAX_TRIES - otpSendCount} left
+            </span>
+          </div>
+        )}
+
+        {/* STEP 1: Email */}
         {step === 1 && (
           <form onSubmit={handleSendOtp} style={s.form}>
             <label style={s.label}>Registered Email</label>
@@ -151,27 +227,41 @@ export default function ForgotPassword() {
               onChange={e => { setEmail(e.target.value); setError('') }}
               autoFocus
               required
+              disabled={isLocked}
             />
-            <button style={{ ...s.btn, opacity: loading ? 0.7 : 1 }} type="submit" disabled={loading}>
+            <button
+              style={{ ...s.btn, opacity: (loading || isLocked) ? 0.6 : 1 }}
+              type="submit"
+              disabled={loading || isLocked}
+            >
               {loading ? 'Sending…' : 'Send Reset OTP →'}
             </button>
           </form>
         )}
 
-        {/* ── Step 2: OTP ── */}
+        {/* STEP 2: OTP */}
         {step === 2 && (
           <form onSubmit={handleVerifyOtp} style={s.form}>
-            <p style={s.emailTag}>{email} <button type="button" style={s.changeBtn} onClick={() => { setStep(1); setOtp(['','','','','','']); setError(''); setInfo('') }}>Change</button></p>
+            <p style={s.emailTag}>
+              {email}
+              <button
+                type="button" style={s.changeBtn}
+                onClick={() => { setStep(1); setOtp(['','','','','','']); setError(''); setInfo('') }}
+              >Change</button>
+            </p>
             <label style={s.label}>6-digit OTP</label>
             <div style={s.otpRow} onPaste={handleOtpPaste}>
               {otp.map((digit, i) => (
                 <input
                   key={i}
                   ref={el => otpRefs.current[i] = el}
-                  style={{ ...s.otpBox, borderColor: digit ? '#ff4d4f' : '#d9d9d9', boxShadow: digit ? '0 0 0 2px rgba(255,77,79,0.15)' : 'none' }}
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={1}
+                  style={{
+                    ...s.otpBox,
+                    borderColor: digit ? '#6366f1' : '#d9d9d9',
+                    boxShadow: digit ? '0 0 0 3px rgba(99,102,241,0.15)' : 'none',
+                    background: digit ? '#f5f3ff' : 'white',
+                  }}
+                  type="text" inputMode="numeric" maxLength={1}
                   value={digit}
                   onChange={e => handleOtpChange(e.target.value, i)}
                   onKeyDown={e => handleOtpKeyDown(e, i)}
@@ -180,18 +270,36 @@ export default function ForgotPassword() {
               ))}
             </div>
             <div style={s.resendRow}>
-              {countdown > 0
-                ? <span style={s.countdownText}>Resend in {countdown}s</span>
-                : <button type="button" style={s.resendBtn} onClick={handleResend} disabled={loading}>🔄 Resend OTP</button>
-              }
+              {isLocked ? (
+                <span style={{ fontSize: 13, color: '#ef4444', fontWeight: 600 }}>
+                  🔒 Locked. Try again in {formatLockout(lockoutSeconds)}
+                </span>
+              ) : resendCountdown > 0 ? (
+                <span style={s.countdownText}>
+                  Resend in <strong>{resendCountdown}s</strong>
+                  {otpSendCount > 1 && ` · ${OTP_MAX_TRIES - otpSendCount} resends remaining`}
+                </span>
+              ) : otpSendCount >= OTP_MAX_TRIES ? (
+                <span style={{ fontSize: 13, color: '#ef4444' }}>No more resends allowed</span>
+              ) : (
+                <button
+                  type="button" style={s.resendBtn}
+                  onClick={handleResend} disabled={loading}
+                >
+                  🔄 Resend OTP ({OTP_MAX_TRIES - otpSendCount} remaining)
+                </button>
+              )}
             </div>
-            <button style={{ ...s.btn, background: '#ff4d4f', opacity: loading ? 0.7 : 1 }} type="submit" disabled={loading}>
+            <button
+              style={{ ...s.btn, opacity: loading ? 0.75 : 1 }}
+              type="submit" disabled={loading}
+            >
               {loading ? 'Verifying…' : 'Verify OTP →'}
             </button>
           </form>
         )}
 
-        {/* ── Step 3: New Password ── */}
+        {/* STEP 3: New Password */}
         {step === 3 && (
           <form onSubmit={handleResetPassword} style={s.form}>
             <label style={s.label}>New Password</label>
@@ -202,21 +310,25 @@ export default function ForgotPassword() {
                 placeholder="Min. 6 characters"
                 value={newPassword}
                 onChange={e => { setNewPassword(e.target.value); setError('') }}
-                autoFocus
-                required
+                autoFocus required
               />
               <button type="button" style={s.eyeBtn} onClick={() => setShowPass(v => !v)} tabIndex={-1}>
                 {showPass ? '🙈' : '👁️'}
               </button>
             </div>
-            <button style={{ ...s.btn, opacity: loading ? 0.7 : 1 }} type="submit" disabled={loading}>
+            <button
+              style={{ ...s.btn, opacity: loading ? 0.75 : 1 }}
+              type="submit" disabled={loading}
+            >
               {loading ? 'Resetting…' : '✅ Reset Password'}
             </button>
           </form>
         )}
 
         <p style={s.backLink}>
-          <Link to="/login" style={{ color: '#888', fontSize: 13 }}>← Back to Login</Link>
+          <Link to="/login" style={{ color: '#64748b', fontSize: 13, textDecoration: 'none' }}>
+            ← Back to Login
+          </Link>
         </p>
       </div>
     </div>
@@ -224,28 +336,73 @@ export default function ForgotPassword() {
 }
 
 const s = {
-  page: { minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', background: 'linear-gradient(135deg,#fff1f0 0%,#f0f2f5 100%)', padding: '20px' },
-  card: { background: '#fff', padding: '36px 40px', borderRadius: 16, width: '100%', maxWidth: 420, boxShadow: '0 8px 32px rgba(0,0,0,0.10)' },
+  page: {
+    minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center',
+    background: 'linear-gradient(135deg,#f0f9ff 0%,#f8fafc 50%,#fdf4ff 100%)',
+    padding: '20px', fontFamily: 'system-ui, -apple-system, sans-serif',
+  },
+  card: {
+    background: 'white', padding: '40px 40px', borderRadius: 20,
+    width: '100%', maxWidth: 420,
+    boxShadow: '0 8px 32px rgba(0,0,0,0.10)', border: '1px solid #e2e8f0',
+  },
   header: { textAlign: 'center', marginBottom: 20 },
-  logo: { fontSize: 36, marginBottom: 6 },
-  title: { fontSize: 22, fontWeight: 700, color: '#ff4d4f', margin: 0 },
-  subtitle: { fontSize: 14, color: '#888', margin: '4px 0 0' },
-  dots: { display: 'flex', justifyContent: 'center', gap: 10, marginBottom: 24 },
+  cardLogo: {
+    width: 44, height: 44, borderRadius: 12,
+    background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: 22, margin: '0 auto 12px', boxShadow: '0 2px 12px rgba(99,102,241,0.3)',
+  },
+  title: { fontSize: 22, fontWeight: 700, color: '#1e1b4b', margin: '0 0 4px' },
+  subtitle: { fontSize: 14, color: '#94a3b8', margin: 0 },
+  dots: { display: 'flex', justifyContent: 'center', gap: 12, marginBottom: 24 },
   dot: { width: 10, height: 10, borderRadius: '50%', transition: 'all 0.3s' },
+  attemptsBar: {
+    display: 'flex', alignItems: 'center', gap: 4, marginBottom: 14,
+    padding: '8px 12px', background: '#fffbeb', borderRadius: 8,
+    border: '1px solid #fde68a',
+  },
+  lockoutBox: {
+    background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626',
+    padding: '12px 16px', borderRadius: 10, fontSize: 13, marginBottom: 14,
+    textAlign: 'center',
+  },
   form: { display: 'flex', flexDirection: 'column' },
-  label: { fontSize: 13, fontWeight: 600, color: '#333', marginBottom: 6 },
-  input: { padding: '11px 14px', border: '1.5px solid #d9d9d9', borderRadius: 8, fontSize: 14, marginBottom: 6, outline: 'none', boxSizing: 'border-box', width: '100%' },
-  btn: { marginTop: 10, padding: '12px', background: '#1890ff', color: '#fff', border: 'none', borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: 'pointer' },
+  label: { fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 },
+  input: {
+    padding: '11px 14px', border: '1.5px solid #e2e8f0', borderRadius: 10,
+    fontSize: 14, marginBottom: 6, outline: 'none', boxSizing: 'border-box',
+    width: '100%', fontFamily: 'inherit',
+  },
+  btn: {
+    marginTop: 10, padding: '13px',
+    background: 'linear-gradient(135deg,#1e1b4b,#4338ca)',
+    color: 'white', border: 'none', borderRadius: 10,
+    fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+  },
   passWrap: { position: 'relative' },
-  eyeBtn: { position: 'absolute', right: 12, top: '40%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 17 },
-  errorBox: { background: '#fff1f0', border: '1px solid #ffccc7', color: '#cf1322', padding: '10px 14px', borderRadius: 8, fontSize: 13, marginBottom: 14 },
-  infoBox: { background: '#f6ffed', border: '1px solid #b7eb8f', color: '#389e0d', padding: '10px 14px', borderRadius: 8, fontSize: 13, marginBottom: 14 },
-  emailTag: { fontSize: 13, color: '#1890ff', fontWeight: 600, marginBottom: 8 },
-  changeBtn: { marginLeft: 8, background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: 12, textDecoration: 'underline' },
+  eyeBtn: {
+    position: 'absolute', right: 12, top: '40%', transform: 'translateY(-50%)',
+    background: 'none', border: 'none', cursor: 'pointer', fontSize: 17,
+  },
+  errorBox: {
+    background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626',
+    padding: '10px 14px', borderRadius: 10, fontSize: 13, marginBottom: 14,
+  },
+  infoBox: {
+    background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#16a34a',
+    padding: '10px 14px', borderRadius: 10, fontSize: 13, marginBottom: 14,
+  },
+  emailTag: { fontSize: 13, color: '#6366f1', fontWeight: 600, marginBottom: 8 },
+  changeBtn: { marginLeft: 8, background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 12, textDecoration: 'underline' },
   otpRow: { display: 'flex', gap: 8, justifyContent: 'center', margin: '10px 0' },
-  otpBox: { width: 44, height: 50, textAlign: 'center', fontSize: 22, fontWeight: 700, border: '2px solid #d9d9d9', borderRadius: 8, outline: 'none', transition: 'all 0.2s' },
-  resendRow: { textAlign: 'center', margin: '6px 0' },
-  countdownText: { fontSize: 13, color: '#aaa' },
-  resendBtn: { background: 'none', border: 'none', color: '#ff4d4f', cursor: 'pointer', fontSize: 13, fontWeight: 600, textDecoration: 'underline' },
+  otpBox: {
+    width: 44, height: 52, textAlign: 'center', fontSize: 22, fontWeight: 700,
+    border: '2px solid #e2e8f0', borderRadius: 10, outline: 'none', transition: 'all 0.2s',
+    fontFamily: 'inherit',
+  },
+  resendRow: { textAlign: 'center', margin: '8px 0 6px' },
+  countdownText: { fontSize: 13, color: '#94a3b8' },
+  resendBtn: { background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: 13, fontWeight: 600, textDecoration: 'underline' },
   backLink: { textAlign: 'center', marginTop: 20 },
 }

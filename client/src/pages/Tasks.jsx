@@ -1,71 +1,70 @@
 import { useState, useEffect } from 'react'
 import api from '../utils/api'
-import { useNavigate } from 'react-router-dom'
+import TaskCard from '../components/tasks/TaskCard'
+import EmptyState from '../components/common/EmptyState'
+import LoadingSpinner from '../components/common/LoadingSpinner'
 
 export default function Tasks() {
   const [tasks, setTasks] = useState([])
-  const navigate = useNavigate()
+  const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    api.get('/tasks/my').then(res => setTasks(res.data))
-  }, [])
+  useEffect(() => { fetchTasks() }, [])
+
+  const fetchTasks = async () => {
+    setLoading(true)
+    try {
+      const res = await api.get('/tasks/my')
+      setTasks(res.data)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const updateStatus = async (taskId, status) => {
     await api.patch(`/tasks/${taskId}`, { status })
-    const res = await api.get('/tasks/my')
-    setTasks(res.data)
+    fetchTasks()
   }
 
-  const statusColor = { TODO:'#faad14', IN_PROGRESS:'#1890ff', DONE:'#52c41a' }
-  const priorityColor = { LOW:'#52c41a', MEDIUM:'#faad14', HIGH:'#ff4d4f' }
+  const deleteTask = async (taskId) => {
+    await api.delete(`/tasks/${taskId}`)
+    fetchTasks()
+  }
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <h2>My Tasks</h2>
-        <button style={styles.btn} onClick={() => navigate('/dashboard')}>Dashboard</button>
+    <div className="p-6">
+      {/* Header */}
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-800">My Tasks</h1>
+        <p className="text-gray-500 text-sm mt-1">All tasks assigned to you</p>
       </div>
 
-      {tasks.map(task => (
-        <div key={task.id} style={styles.taskCard}>
-          <div style={styles.taskHeader}>
-            <h3 style={{margin:0}}>{task.title}</h3>
-            <div>
-              <span style={{...styles.badge, background: priorityColor[task.priority]}}>
-                {task.priority}
-              </span>
+      {loading ? (
+        <LoadingSpinner />
+      ) : tasks.length === 0 ? (
+        <EmptyState
+          icon="✅"
+          title="No tasks yet"
+          description="Tasks assigned to you will appear here."
+        />
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
+          {tasks.map(task => (
+            <div key={task.id}>
+              <TaskCard task={task} onDelete={deleteTask} />
+              {/* Status Update */}
               <select
-                style={{...styles.badge, background: statusColor[task.status], border:'none', cursor:'pointer', color:'white'}}
+                className="mt-2 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 value={task.status}
-                onChange={e => updateStatus(task.id, e.target.value)}>
-                <option value="TODO">TODO</option>
-                <option value="IN_PROGRESS">IN PROGRESS</option>
-                <option value="DONE">DONE</option>
+                onChange={e => updateStatus(task.id, e.target.value)}
+              >
+                <option value="TODO">To Do</option>
+                <option value="IN_PROGRESS">In Progress</option>
+                <option value="DONE">Done</option>
               </select>
             </div>
-          </div>
-          {task.description && <p style={styles.desc}>{task.description}</p>}
-          <div style={styles.meta}>
-            {task.dueDate && <span>📅 Due: {task.dueDate}</span>}
-          </div>
+          ))}
         </div>
-      ))}
-
-      {tasks.length === 0 && (
-        <div style={styles.empty}>No tasks assigned to you yet.</div>
       )}
     </div>
   )
-}
-
-const styles = {
-  container: { padding:'20px', background:'#f0f2f5', minHeight:'100vh' },
-  header: { display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px', background:'white', padding:'15px 20px', borderRadius:'10px' },
-  taskCard: { background:'white', padding:'20px', borderRadius:'10px', marginBottom:'12px', boxShadow:'0 2px 8px rgba(0,0,0,0.05)' },
-  taskHeader: { display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px' },
-  desc: { color:'#666', fontSize:'14px' },
-  meta: { color:'#999', fontSize:'13px', marginTop:'8px' },
-  badge: { padding:'3px 10px', borderRadius:'12px', color:'white', fontSize:'12px', marginLeft:'5px' },
-  btn: { padding:'8px 16px', background:'#1890ff', color:'white', border:'none', borderRadius:'5px', cursor:'pointer' },
-  empty: { textAlign:'center', background:'white', padding:'40px', borderRadius:'10px', color:'#999' }
 }

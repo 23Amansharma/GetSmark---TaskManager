@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../utils/api'
-import { useAuth } from '../context/AuthContext'
+import NotificationBell from '../components/common/NotificationBell'
+import { useAuth } from '../hooks/useAuth'
 import './dashboard.css'
 
 const REFRESH_INTERVAL = 30000
 
 const PRIORITY_CLASS = {
   LOW: 'priority-low',
+  
   MEDIUM: 'priority-medium',
   HIGH: 'priority-high'
 }
@@ -273,72 +275,8 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="dashboard-shell">
-      <aside className="dashboard-sidebar">
-        <div className="dashboard-brand-row">
-          <div className="dashboard-brand-media">Logo</div>
-          <div className="dashboard-brand-copy">
-            <span className="dashboard-brand-label">Workspace</span>
-            <strong>Task Manager</strong>
-            <small>Simple team operations</small>
-          </div>
-        </div>
-
-        <nav className="dashboard-nav">
-          <div className="dashboard-nav-heading">Overview</div>
-          <div className="dashboard-side-group">
-            {PRIMARY_NAV_ITEMS.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                className={`side-link ${item.key === 'dashboard' ? 'side-link-active' : ''}`}
-                onClick={() => handlePrimaryNavClick(item.action)}
-              >
-                <span className="side-link-dot" />
-                <span>{item.label}</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="dashboard-nav-divider" />
-
-          <div className="dashboard-nav-heading">Workspace</div>
-          <div className="dashboard-side-group">
-            {SECONDARY_NAV_ITEMS.map((item) => (
-              <div key={item.key} className="side-link side-link-static">
-                <span className="side-link-dot" />
-                <span>{item.label}</span>
-              </div>
-            ))}
-          </div>
-        </nav>
-
-        <div className="sidebar-profile-wrap">
-          {profileOpen && (
-            <div className="sidebar-profile-card">
-              <strong>{fullName}</strong>
-              <span>{userEmail}</span>
-            </div>
-          )}
-
-          <button
-            type="button"
-            className="sidebar-profile-toggle"
-            onClick={() => setProfileOpen((value) => !value)}
-          >
-            <div className="sidebar-avatar">{displayName.slice(0, 2).toUpperCase()}</div>
-            <div className="sidebar-profile-summary">
-              <strong>{fullName}</strong>
-              <span>{userEmail}</span>
-            </div>
-            <span className={`sidebar-profile-arrow ${profileOpen ? 'sidebar-profile-arrow-open' : ''}`}>
-              ^
-            </span>
-          </button>
-        </div>
-      </aside>
-
-      <main className="dashboard-main">
+    <div className="p-6">
+      <div>
         <header className="dashboard-topbar">
           <div className="dashboard-topbar-copy">
             <span className="dashboard-kicker">Task Manager Dashboard</span>
@@ -347,6 +285,7 @@ export default function Dashboard() {
           </div>
 
           <div className="dashboard-actions">
+            <NotificationBell />
             <div className="dashboard-sync-chip">
               <span>Updated</span>
               <strong>{lastUpdated ? formatDateTime(lastUpdated) : 'Loading...'}</strong>
@@ -354,9 +293,7 @@ export default function Dashboard() {
             <button type="button" className="action-btn action-btn-muted" onClick={() => fetchDashboard(Boolean(data))}>
               {refreshing ? 'Refreshing...' : 'Refresh'}
             </button>
-            <button type="button" className="action-btn action-btn-danger" onClick={logout}>
-              Logout
-            </button>
+           
           </div>
         </header>
 
@@ -588,7 +525,7 @@ export default function Dashboard() {
             </section>
           </>
         )}
-      </main>
+      </div>
     </div>
   )
 }
