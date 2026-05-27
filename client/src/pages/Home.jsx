@@ -487,20 +487,28 @@ function Footer({ nav }) {
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: '52px clamp(1rem,4vw,2.5rem) 40px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: '2.5rem' }}>
 
         {/* Brand */}
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: '0.75rem', fontFamily: 'Syne,sans-serif', fontWeight: 800, fontSize: '1.05rem', color: C.black }}>
-            <img src="/logo.svg" alt="GetSmark" style={{ height: 28, width: 28 }} />
-            GetSmark
-          </div>
-          <p style={{ ...sP, fontSize: '0.83rem', maxWidth: 200 }}>Project & task management for teams that value clarity and accountability.</p>
-          <div style={{ display: 'flex', gap: '0.55rem', marginTop: '1rem' }}>
-            {['𝕏', 'in', 'GH'].map(s => (
-              <div key={s} style={{ width: 30, height: 30, borderRadius: '50%', border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer', color: C.muted, fontFamily: 'Syne,sans-serif', transition: 'all 0.2s' }}
-                onMouseOver={e => { e.currentTarget.style.background = C.black; e.currentTarget.style.color = C.white; e.currentTarget.style.borderColor = C.black }}
-                onMouseOut={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = C.muted; e.currentTarget.style.borderColor = C.border }}>{s}</div>
-            ))}
-          </div>
-        </div>
+       <div>
+  <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: '0.75rem', fontFamily: 'Syne,sans-serif', fontWeight: 800, fontSize: '1.05rem', color: C.black }}>
+    <img src="/logo.svg" alt="GetSmark" style={{ height: 28, width: 28 }} />
+    GetSmark
+  </div>
+  <p style={{ ...sP, fontSize: '0.83rem', maxWidth: 200 }}>Project & task management for teams that value clarity and accountability.</p>
+  <div style={{ display: 'flex', gap: '0.55rem', marginTop: '1rem' }}>
+    {[
+      { label: '𝕏', url: 'https://x.com/AmanSha57475309' },
+      { label: 'in', url: 'https://www.linkedin.com/in/aman-sharma-4aa314251/' },
+      { label: 'GH', url: 'https://github.com/23Amansharma' },
+      { label: 'PF', url: 'https://www.aman-sharma.me/' },
+    ].map(s => (
+      <a key={s.label} href={s.url} target="_blank" rel="noreferrer"
+        style={{ width: 30, height: 30, borderRadius: '50%', border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer', color: C.muted, fontFamily: 'Syne,sans-serif', transition: 'all 0.2s', textDecoration: 'none' }}
+        onMouseOver={e => { e.currentTarget.style.background = C.black; e.currentTarget.style.color = C.white; e.currentTarget.style.borderColor = C.black }}
+        onMouseOut={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = C.muted; e.currentTarget.style.borderColor = C.border }}>
+        {s.label}
+      </a>
+    ))}
+  </div>
+</div>
 
         {/* Quick Links */}
         <div>
