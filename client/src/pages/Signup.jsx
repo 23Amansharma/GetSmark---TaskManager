@@ -163,7 +163,7 @@ export default function Signup() {
             <img src="/logo.svg" alt="GetSmark" style={{ height: 40, width: 40 }} />
             <h1 style={s.brandName}>GetSmark</h1>
           </div>
-          <p style={s.brandTagline}>Join thousands of teams shipping faster</p>
+          <p style={s.brandTagline}>Move from chaos to clarity</p>
         </div>
         <div style={s.steps}>
           {[
