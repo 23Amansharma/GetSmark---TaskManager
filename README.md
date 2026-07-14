@@ -1,6 +1,6 @@
 # ⚡ GetSmark — Task Manager
 
-A full-stack team task management application built with **Spring Boot** and **React**.  
+A full-stack team task management web application built with **Spring Boot** and **React**.  
 Create projects, invite team members, assign tasks, and track progress — all in one place.
 
 ---
